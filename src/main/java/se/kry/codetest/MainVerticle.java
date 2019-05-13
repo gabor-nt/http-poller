@@ -21,12 +21,13 @@ public class MainVerticle extends AbstractVerticle {
 
   private HashMap<String, JsonObject> services = new HashMap<>();
   private DBConnector connector;
-  private BackgroundPoller poller = new BackgroundPoller();
+  private BackgroundPoller poller;
   private Logger logger = LoggerFactory.getLogger(this.getClass());
 
 
   @Override
   public void start(Future<Void> startFuture) {
+    poller = new BackgroundPoller(vertx);
     connector = new DBConnector(vertx);
     Router router = Router.router(vertx);
     router.route().handler(BodyHandler.create());
@@ -38,7 +39,7 @@ public class MainVerticle extends AbstractVerticle {
         logger.error("DB connection issue", asyncResult.cause());
       }
     });
-    vertx.setPeriodic(1000 * 60, timerId -> poller.pollServices(services));
+    vertx.setPeriodic(1000 * 6, timerId -> poller.pollServices(services));
     setRoutes(router);
     vertx
         .createHttpServer()
