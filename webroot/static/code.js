@@ -5,7 +5,7 @@ fetch(servicesRequest)
 .then(function(serviceList) {
   serviceList.forEach(service => {
     var li = document.createElement("li");
-    li.appendChild(document.createTextNode(service.name + ': ' + service.status));
+    li.appendChild(document.createTextNode(service.name + '( ' + service.url+ ' ' + new Date(service.createdAt) + '): ' + service.status));
     listContainer.appendChild(li);
   });
 });
