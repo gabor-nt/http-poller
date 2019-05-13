@@ -90,13 +90,16 @@ public class MainVerticle extends AbstractVerticle {
   private void setPostService(Router router) {
     router.post("/service").handler(req -> {
       JsonObject jsonBody = req.getBodyAsJson();
-      String url = jsonBody.getString("url");
-      String name = jsonBody.getString("name");
-      Instant createdAt = Instant.now();
+      JsonObject service = buildServiceObject(jsonBody.getString("url"), jsonBody.getString("name"));
       connector = new DBConnector(vertx);
-      connector.query("INSERT INTO service (url, name, createdAt) values (?, ?, ?)", new JsonArray().add(url).add(name).add(createdAt)).setHandler(asyncResult -> {
+      connector.query("INSERT INTO service (url, name, createdAt) values (?, ?, ?)",
+          new JsonArray()
+              .add(service.getString("url"))
+              .add(service.getString("name"))
+              .add(service.getString("createdAt"))
+      ).setHandler(asyncResult -> {
         if (asyncResult.succeeded()) {
-          services.put(url, jsonBody.put("status", "UNKNOWN").put("createdAt", createdAt));
+          services.put(service.getString("url"), service);
           req.response()
               .putHeader("content-type", "text/plain")
               .end("OK");
@@ -108,6 +111,14 @@ public class MainVerticle extends AbstractVerticle {
         }
       });
     });
+  }
+
+  private JsonObject buildServiceObject(String url, String name) {
+    return new JsonObject()
+        .put("url", url)
+        .put("name", name != null ? name : url)
+        .put("createdAt", Instant.now())
+        .put("status", "UNKNOWN");
   }
 
   private void setListServices(Router router) {

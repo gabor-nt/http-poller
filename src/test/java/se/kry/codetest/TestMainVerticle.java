@@ -69,6 +69,34 @@ public class TestMainVerticle {
   }
 
   @Test
+  @DisplayName("post a new service without name")
+  @Timeout(value = 10, timeUnit = TimeUnit.SECONDS)
+  void post_new_service_without_name(Vertx vertx, VertxTestContext testContext) {
+    JsonObject payload = new JsonObject().put("url", "http://www.example.com");
+    WebClient.create(vertx)
+        .post(8080, "::1", "/service")
+        .sendJsonObject(payload, response -> testContext.verify(() -> {
+          assertEquals(200, response.result().statusCode());
+          String body = response.result().bodyAsString();
+          assertEquals("OK", body);
+
+          WebClient.create(vertx)
+              .get(8080, "::1", "/service")
+              .send(r -> testContext.verify(() -> {
+                assertEquals(200, r.result().statusCode());
+                JsonArray b = r.result().bodyAsJsonArray();
+                assertEquals(1, b.size());
+                JsonObject service = b.getJsonObject(0);
+                assertEquals("http://www.example.com", service.getString("url"));
+                assertEquals("http://www.example.com", service.getString("name"));
+                assertEquals("UNKNOWN", service.getString("status"));
+                assertNotNull(service.getString("createdAt"));
+                testContext.completeNow();
+              }));
+        }));
+  }
+
+  @Test
   @DisplayName("delete an existing service")
   @Timeout(value = 10, timeUnit = TimeUnit.SECONDS)
   void delete_existing_service(Vertx vertx, VertxTestContext testContext) throws Exception {
