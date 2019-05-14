@@ -7,7 +7,6 @@ import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
 import io.vertx.ext.web.client.WebClient;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -19,8 +18,8 @@ public class BackgroundPoller {
     client = WebClient.create(vertx);
   }
 
-  public List<Future<JsonObject>> pollServices(HashMap<String, JsonObject> services) {
-    return services.values().parallelStream().map(this::test).collect(Collectors.toList());
+  public List<Future<JsonObject>> pollServices(List<JsonObject> services) {
+    return services.parallelStream().map(this::test).collect(Collectors.toList());
   }
 
   private Future<JsonObject> test(JsonObject service) {

@@ -9,51 +9,48 @@ import io.vertx.core.logging.LoggerFactory;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.StaticHandler;
+import se.kry.codetest.repository.ServiceRepository;
 
 import java.io.UnsupportedEncodingException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLDecoder;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 
 public class MainVerticle extends AbstractVerticle {
 
-  private HashMap<String, JsonObject> services = new HashMap<>();
-  private DBConnector connector;
   private BackgroundPoller poller;
+  private ServiceRepository serviceRepository;
   private Logger logger = LoggerFactory.getLogger(this.getClass());
 
 
   @Override
   public void start(Future<Void> startFuture) {
     poller = new BackgroundPoller(vertx);
-    connector = new DBConnector(vertx);
+    serviceRepository = new ServiceRepository(new DBConnector(vertx));
     Router router = Router.router(vertx);
     router.route().handler(BodyHandler.create());
-    connector.query("SELECT * FROM service;").setHandler(asyncResult -> {
-      if (asyncResult.succeeded()) {
-        asyncResult.result().getRows().forEach(row -> services.put(row.getString("url"), row.put("status", "UNKNOWN")));
-        logger.info("Services from DB:" + services.keySet());
+    serviceRepository.init().setHandler(result -> {
+      if (result.succeeded()) {
+        vertx.setPeriodic(1000 * 6, timerId -> poller.pollServices(serviceRepository.getServices()));
+        setRoutes(router);
+        vertx
+            .createHttpServer()
+            .requestHandler(router)
+            .listen(8080, r -> {
+              if (r.succeeded()) {
+                logger.info("KRY code test service started");
+                startFuture.complete();
+              } else {
+                startFuture.fail(r.cause());
+              }
+            });
       } else {
-        logger.error("DB connection issue", asyncResult.cause());
+        startFuture.fail(result.cause());
       }
     });
-    vertx.setPeriodic(1000 * 6, timerId -> poller.pollServices(services));
-    setRoutes(router);
-    vertx
-        .createHttpServer()
-        .requestHandler(router)
-        .listen(8080, result -> {
-          if (result.succeeded()) {
-            logger.info("KRY code test service started");
-            startFuture.complete();
-          } else {
-            startFuture.fail(result.cause());
-          }
-        });
+
   }
 
   private void setRoutes(Router router) {
@@ -68,10 +65,9 @@ public class MainVerticle extends AbstractVerticle {
       try {
         String service = URLDecoder.decode(req.pathParam("service"), "UTF-8");
         logger.info("Deleting: " + service);
-        services.remove(service);
-        connector = new DBConnector(vertx);
-        connector.query("DELETE FROM service WHERE url=?", new JsonArray().add(service)).setHandler(asyncResult -> {
+        serviceRepository.remove(service).setHandler(asyncResult -> {
           if (asyncResult.succeeded()) {
+            logger.info("Delete successful");
             req.response()
                 .putHeader("content-type", "text/plain")
                 .end("OK");
@@ -105,25 +101,14 @@ public class MainVerticle extends AbstractVerticle {
             .end("Invalid url: " + jsonBody.getString("url"));
         return;
       }
-      connector = new DBConnector(vertx);
-      connector.query("INSERT OR REPLACE INTO service (url, name, createdAt)" +
-              " values (?," +
-              " ?," +
-              " COALESCE((SELECT createdAt FROM service WHERE url = ?), ?)" +
-              ")",
-          new JsonArray()
-              .add(service.getString("url"))
-              .add(service.getString("name"))
-              .add(service.getString("url"))
-              .add(service.getString("createdAt"))
-      ).setHandler(asyncResult -> {
+      serviceRepository.upsert(service).setHandler(asyncResult -> {
         if (asyncResult.succeeded()) {
-          services.put(service.getString("url"), service);
+          logger.info("Post successful");
           req.response()
               .putHeader("content-type", "text/plain")
               .end("OK");
         } else {
-          logger.error("insert failed", asyncResult.cause());
+          logger.error("Post failed", asyncResult.cause());
           req.response()
               .setStatusCode(500)
               .putHeader("content-type", "text/plain")
@@ -143,7 +128,8 @@ public class MainVerticle extends AbstractVerticle {
 
   private void setListServices(Router router) {
     router.get("/service").handler(req -> {
-      List<JsonObject> jsonServices = new ArrayList<>(services.values());
+      logger.info("List");
+      List<JsonObject> jsonServices = serviceRepository.getServices();
       req.response()
           .putHeader("content-type", "application/json")
           .end(new JsonArray(jsonServices).encode());
