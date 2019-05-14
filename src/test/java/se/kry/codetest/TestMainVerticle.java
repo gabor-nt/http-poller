@@ -96,6 +96,30 @@ public class TestMainVerticle {
         }));
   }
 
+
+  @Test
+  @DisplayName("post a new service with invalid url")
+  @Timeout(value = 10, timeUnit = TimeUnit.SECONDS)
+  void post_new_service_with_invalid_url(Vertx vertx, VertxTestContext testContext) {
+    JsonObject payload = new JsonObject().put("url", "www.example.com");
+    WebClient.create(vertx)
+        .post(8080, "::1", "/service")
+        .sendJsonObject(payload, response -> testContext.verify(() -> {
+          assertEquals(200, response.result().statusCode());
+          String body = response.result().bodyAsString();
+          assertEquals("Invalid url: www.example.com", body);
+
+          WebClient.create(vertx)
+              .get(8080, "::1", "/service")
+              .send(r -> testContext.verify(() -> {
+                assertEquals(200, r.result().statusCode());
+                JsonArray b = r.result().bodyAsJsonArray();
+                assertEquals(0, b.size());
+                testContext.completeNow();
+              }));
+        }));
+  }
+
   @Test
   @DisplayName("delete an existing service")
   @Timeout(value = 10, timeUnit = TimeUnit.SECONDS)

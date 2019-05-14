@@ -11,6 +11,8 @@ import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.StaticHandler;
 
 import java.io.UnsupportedEncodingException;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.net.URLDecoder;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -76,14 +78,16 @@ public class MainVerticle extends AbstractVerticle {
           } else {
             logger.error("Failed to delete", asyncResult.cause());
             req.response()
+                .setStatusCode(500)
                 .putHeader("content-type", "text/plain")
-                .end("Eek");
+                .end("Internal error");
           }
         });
       } catch (UnsupportedEncodingException e) {
         req.response()
+            .setStatusCode(400)
             .putHeader("content-type", "text/plain")
-            .end("Eek");
+            .end("Invalid parameter: " + req.pathParam("service"));
       }
     });
   }
@@ -91,7 +95,15 @@ public class MainVerticle extends AbstractVerticle {
   private void setPostService(Router router) {
     router.post("/service").handler(req -> {
       JsonObject jsonBody = req.getBodyAsJson();
-      JsonObject service = buildServiceObject(jsonBody.getString("url"), jsonBody.getString("name"));
+      JsonObject service;
+      try {
+        service = buildServiceObject(jsonBody.getString("url"), jsonBody.getString("name"));
+      } catch (MalformedURLException e) {
+        req.response()
+            .putHeader("content-type", "text/plain")
+            .end("Invalid url: " + jsonBody.getString("url"));
+        return;
+      }
       connector = new DBConnector(vertx);
       connector.query("INSERT INTO service (url, name, createdAt) values (?, ?, ?)",
           new JsonArray()
@@ -105,18 +117,19 @@ public class MainVerticle extends AbstractVerticle {
               .putHeader("content-type", "text/plain")
               .end("OK");
         } else {
-          logger.error("post failed", asyncResult.cause());
+          logger.error("insert failed", asyncResult.cause());
           req.response()
+              .setStatusCode(500)
               .putHeader("content-type", "text/plain")
-              .end("Eek");
+              .end("Internal error");
         }
       });
     });
   }
 
-  private JsonObject buildServiceObject(String url, String name) {
+  private JsonObject buildServiceObject(String url, String name) throws MalformedURLException {
     return new JsonObject()
-        .put("url", url)
+        .put("url", new URL(url).toString())
         .put("name", name != null ? name : url)
         .put("createdAt", Instant.now())
         .put("status", "UNKNOWN");
