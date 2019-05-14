@@ -100,15 +100,21 @@ public class MainVerticle extends AbstractVerticle {
         service = buildServiceObject(jsonBody.getString("url"), jsonBody.getString("name"));
       } catch (MalformedURLException e) {
         req.response()
+            .setStatusCode(400)
             .putHeader("content-type", "text/plain")
             .end("Invalid url: " + jsonBody.getString("url"));
         return;
       }
       connector = new DBConnector(vertx);
-      connector.query("INSERT INTO service (url, name, createdAt) values (?, ?, ?)",
+      connector.query("INSERT OR REPLACE INTO service (url, name, createdAt)" +
+              " values (?," +
+              " ?," +
+              " COALESCE((SELECT createdAt FROM service WHERE url = ?), ?)" +
+              ")",
           new JsonArray()
               .add(service.getString("url"))
               .add(service.getString("name"))
+              .add(service.getString("url"))
               .add(service.getString("createdAt"))
       ).setHandler(asyncResult -> {
         if (asyncResult.succeeded()) {

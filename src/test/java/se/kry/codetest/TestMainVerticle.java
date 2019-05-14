@@ -105,7 +105,7 @@ public class TestMainVerticle {
     WebClient.create(vertx)
         .post(8080, "::1", "/service")
         .sendJsonObject(payload, response -> testContext.verify(() -> {
-          assertEquals(200, response.result().statusCode());
+          assertEquals(400, response.result().statusCode());
           String body = response.result().bodyAsString();
           assertEquals("Invalid url: www.example.com", body);
 
